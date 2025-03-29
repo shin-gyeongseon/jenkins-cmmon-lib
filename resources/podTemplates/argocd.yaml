@@ -1,5 +1,5 @@
-- name: argocd
-  image: argoproj/argocd-cli:latest
-  command:
-    - cat
-  tty: true
+    - name: argocd
+      image: argoproj/argocd-cli:latest
+      command:
+        - cat
+      tty: true

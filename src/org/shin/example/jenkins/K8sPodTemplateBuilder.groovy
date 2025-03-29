@@ -6,77 +6,126 @@ import org.yaml.snakeyaml.Yaml
 import org.yaml.snakeyaml.LoaderOptions
 import org.yaml.snakeyaml.constructor.SafeConstructor
 
-class K8sPodTemplateBuilder {
+/*
+  Original reference:
+  https://github.com/OndraZizka/yaml-merge/blob/master/src/main/java/org/cobbzilla/util/yml/YmlMerger.java
+ */
 
-    private final Yaml yamlParser
+class MyYaml {
+    private final Yaml parser
 
-    K8sPodTemplateBuilder() {
-        def options = new LoaderOptions()
-        this.yamlParser = new Yaml(new SafeConstructor(options))
+    MyYaml() {
+        LoaderOptions options = new LoaderOptions()
+        parser = new Yaml(new SafeConstructor(options))
+        // parser = new Yaml(new SafeConstructor())
     }
 
-    String temporaryString = "temporary String"
-
-    /**
-     * 병합된 Pod 템플릿 YAML 생성
-     * @param params - Map 형태의 파라미터 (예: 컨테이너 이름 및 옵션)
-     * @return 병합된 YAML 문자열
-     */
-    String buildPodTemplate(Map params) {
-        List<String> templates = []
-
-        templates.add(loadResource('podTemplates/base.yaml'))
-
-        if (params.containsKey('kaniko')) {
-            templates.add(loadResource('podTemplates/kaniko.yaml'))
+    String merge(List<String> yamls) {
+        Map<String, Object> mergedResult = new LinkedHashMap<String, Object>();
+        for (yaml in yamls) {
+            final Map<String, Object> yamlToMerge = parser.load(yaml)
+            // Merge into results map.
+            mergeStructures(mergedResult, yamlToMerge)
         }
-
-        if (params.containsKey('kubectl')) {
-            templates.add(loadResource('podtemplates/kubectl.yaml'))
-        }
-        if (params.containsKey('argocd')) {
-            templates.add(loadResource('podtemplates/argocd.yaml'))
-        }
-
-        // YAML 병합
-        Map mergedYaml = mergeYamlTemplates(templates)
-        return yamlParser.dump(mergedYaml)
+        return parser.dump(mergedResult)
     }
 
-    /**
-     * 리소스 파일 로드
-     * @param resourcePath - 리소스 경로
-     * @return YAML 문자열
-     */
-    private String loadResource(String resourcePath) {
-        return libraryResource(resourcePath)
+    private static Object addToMergedResult(Map<String, Object> mergedResult, String key, Object yamlValue) {
+        return mergedResult.put(key, yamlValue)
     }
 
-    /**
-     * 여러 YAML 템플릿 병합
-     * @param yamlStrings - YAML 문자열 리스트
-     * @return 병합된 YAML Map
-     */
-    private Map mergeYamlTemplates(List<String> yamlStrings) {
-        Map mergedResult = [:]
-        yamlStrings.each { yamlString ->
-            Map parsedYaml = yamlParser.load(yamlString)
-            mergeStructures(mergedResult, parsedYaml)
+    private static IllegalArgumentException unknownValueType(String key, Object yamlValue) {
+        final String msg = "Cannot mergeYamlFiles element of unknown type: " + key + ": " + yamlValue.getClass().getName()
+        return new IllegalArgumentException(msg)
+    }
+
+    private void mergeLists(Map<String, Object> mergedResult, String key, Object yamlValue) {
+        if (!(yamlValue instanceof List && mergedResult.get(key) instanceof List)) {
+            throw new IllegalArgumentException("Cannot mergeYamlFiles a list with a non-list: " + key)
         }
-        return mergedResult
+
+        List<Object> originalList = (List<Object>) mergedResult.get(key)
+
+        // original implementation
+        // originalList.addAll((List<Object>) yamlValue)
+
+        // my implementation
+        // below is non-standard approach as I assume a key:value mapping called (name->value) to identify a Map
+        List<Object> yamlList = (List<Object>) yamlValue
+        Map<String, Object> originalCache = new LinkedHashMap<>()
+        String name
+        for (ori in originalList) {
+            if (ori instanceof Map) {
+                name = ori.get('name')
+                if (name) {
+                    originalCache.put(name, ori)
+                }
+            }
+        }
+
+        def merged
+        for (item in yamlList) {
+            merged = false
+            if (item instanceof Map) {
+                name = item.get('name')
+                if (name && originalCache.containsKey(name)) {
+                    mergeStructures((Map<String, Object>) originalCache.get(name), (Map<String, Object>) item)
+                    merged = true
+                }
+            }
+            if (!merged) {
+                originalList.add(item)
+            }
+        }
     }
 
-    /**
-     * 두 개의 YAML 구조를 병합하는 재귀 메서드
-     */
-    private void mergeStructures(Map target, Map source) {
-        source.each { key, value ->
-            if (value instanceof Map && target[key] instanceof Map) {
-                mergeStructures(target[key] as Map, value)
-            } else if (value instanceof List && target[key] instanceof List) {
-                target[key].addAll(value)
+    private void mergeStructures(Map<String, Object> targetTree, Map<String, Object> sourceTree) {
+        if (sourceTree == null) return
+
+        for (String key : sourceTree.keySet()) {
+
+            Object yamlValue = sourceTree.get(key)
+            if (yamlValue == null) {
+                addToMergedResult(targetTree, key, yamlValue)
+                continue
+            }
+
+            Object existingValue = targetTree.get(key);
+            if (existingValue != null) {
+                if (yamlValue instanceof Map) {
+                    if (existingValue instanceof Map) {
+                        mergeStructures((Map<String, Object>) existingValue, (Map<String, Object>) yamlValue);
+                    } else if (existingValue instanceof String) {
+                        throw new IllegalArgumentException("Cannot mergeYamlFiles complex element into a simple element: " + key)
+                    } else {
+                        throw unknownValueType(key, yamlValue)
+                    }
+                } else if (yamlValue instanceof List) {
+                    mergeLists(targetTree, key, yamlValue)
+
+                } else if (yamlValue instanceof String
+                        || yamlValue instanceof Boolean
+                        || yamlValue instanceof Double
+                        || yamlValue instanceof Integer) {
+
+                    addToMergedResult(targetTree, key, yamlValue)
+
+                } else {
+                    throw unknownValueType(key, yamlValue)
+                }
+
             } else {
-                target[key] = value
+                if (yamlValue instanceof Map
+                        || yamlValue instanceof List
+                        || yamlValue instanceof String
+                        || yamlValue instanceof Boolean
+                        || yamlValue instanceof Integer
+                        || yamlValue instanceof Double) {
+
+                    addToMergedResult(targetTree, key, yamlValue)
+                } else {
+                    throw unknownValueType(key, yamlValue)
+                }
             }
         }
     }
