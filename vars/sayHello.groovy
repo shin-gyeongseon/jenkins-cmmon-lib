@@ -1,4 +1,4 @@
-import org.shin.example.jenkins.MyClass
+import main.groovy.org.shin.example.jenkins.MyClass
 
 def call(String name = 'World!') {
     def clazz = new MyClass()
