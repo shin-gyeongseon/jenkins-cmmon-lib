@@ -1,7 +1,7 @@
 #!/usr/bin/env groovy
 import org.shin.example.jenkins.K8sPodTemplateBuilder
 
-def call(Map params = [:]) {
+def call(Map<String, Boolean> params = [:]) {
     // 기본 템플릿은 항상 포함
     def resource = libraryResource('podTemplates/base.yaml')
 
