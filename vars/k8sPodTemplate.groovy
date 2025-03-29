@@ -1,6 +1,6 @@
 #!/usr/bin/env groovy
 
-import com.github.jenkins.K8sPodTemplateBuilder
+import org.shin.example.jenkins.K8sPodTemplateBuilder
 
 def call(Map params = [:]) {
     def builder = new K8sPodTemplateBuilder()
