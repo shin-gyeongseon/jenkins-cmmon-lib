@@ -11,10 +11,10 @@ import org.yaml.snakeyaml.constructor.SafeConstructor
   https://github.com/OndraZizka/yaml-merge/blob/master/src/main/java/org/cobbzilla/util/yml/YmlMerger.java
  */
 
-class MyYaml {
+class K8sPodTemplateBuilder {
     private final Yaml parser
 
-    MyYaml() {
+    K8sPodTemplateBuilder() {
         LoaderOptions options = new LoaderOptions()
         parser = new Yaml(new SafeConstructor(options))
         // parser = new Yaml(new SafeConstructor())
