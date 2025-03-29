@@ -1,5 +1,7 @@
 package org.shin.example.jenkins
 
+@Grab('org.yaml:snakeyaml:2.4')
+
 import org.yaml.snakeyaml.Yaml
 import org.yaml.snakeyaml.LoaderOptions
 import org.yaml.snakeyaml.constructor.SafeConstructor
